@@ -1,17 +1,21 @@
-# 나의 python 버전
 FROM python:3.11.1
 
-# /code 폴더 만들기
-WORKDIR /code
+# 시간대 설정
+ENV TZ=Asia/Seoul
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# ./requirements.txt 를 /code/requirements.txt 로 복사
-COPY ./requirements.txt /code/requirements.txt
+# 작업 디렉토리 생성
+WORKDIR /app
 
-# requirements.txt 를 보고 모듈 전체 설치(-r)
-RUN pip install --no-cache-dir -r /code/requirements.txt
+# requirements 복사 및 설치
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# 이제 app 에 있는 파일들을 /code/app 에 복사
-COPY ./app /code/app
+# 앱 소스 복사
+COPY ./app ./app
 
-# 실행
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80"]
+# 포트 노출
+EXPOSE 8000
+
+# 실행 명령
+ENTRYPOINT ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
