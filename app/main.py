@@ -1,14 +1,19 @@
-from typing import Union
-
 from fastapi import FastAPI
+from typing import Union
+from app.router import user_router
+from app.config.database import Base, engine
 
 app = FastAPI()
 
+# DB 테이블 생성
+Base.metadata.create_all(bind=engine)
+
+# 라우터 등록
+app.include_router(user_router.router)
 
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
-
 
 @app.get("/items/{item_id}")
 def read_item(item_id: int, q: Union[str, None] = None):
