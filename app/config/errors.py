@@ -8,3 +8,6 @@ class ErrorMessages:
     USER_MISMATCH = "해당 사용자를 찾을 수 없습니다."
     USER_FORBIDDEN = "본인의 정보만 조회할 수 있습니다."
     INVALID_AUTHENTICATION = "유효하지 않은 인증 정보입니다."
+
+    # S3
+    INVALID_S3_AUTHENTICATION = "S3 자격 증명이 없습니다."
