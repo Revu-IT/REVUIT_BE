@@ -24,7 +24,7 @@ def get_wordcloud(
     # csv 저장 경로 지정 
     s3_key = f"positive/{company_name}.csv"  
     try:
-        image_url = generate_wordcloud_and_upload_from_csv(s3_key, company_name, sentiment)
+        image_url = generate_wordcloud_and_upload_from_csv(s3_key, sentiment, company_name)
         return {"image_url": image_url}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
