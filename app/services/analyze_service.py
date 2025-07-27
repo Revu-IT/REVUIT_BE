@@ -8,6 +8,7 @@ import uuid
 import csv
 from app.config.s3 import get_s3_client
 
+# S3 설정
 s3 = get_s3_client()
 BUCKET_NAME = "hanium-reviewit"
 FONT_PATH = os.path.join("fonts", "NanumGothic.ttf")
@@ -17,14 +18,19 @@ def generate_wordcloud_and_upload_from_csv(s3_key: str, sentiment: str, company_
     response = s3.get_object(Bucket=BUCKET_NAME, Key=s3_key)
     content = response['Body'].read().decode('utf-8')
     reader = csv.DictReader(io.StringIO(content))
-
-    # 키워드 추출 및 카운트
+    
+    # 키워드 추출 및 카운트 (sentiment 필터링 포함)
     counter = Counter()
     for row in reader:
-        label = row.get("positive")
-        if sentiment == "positive" and label != "1":
+        label_raw = row.get("positive", "").strip()
+        if not label_raw.isdigit():
             continue
-        if sentiment == "negative" and label != "0":
+
+        label = int(label_raw)
+
+        if sentiment == "positive" and label != 1:
+            continue
+        if sentiment == "negative" and label != 0:
             continue
 
         keywords = row.get("keyword", "")
@@ -34,9 +40,12 @@ def generate_wordcloud_and_upload_from_csv(s3_key: str, sentiment: str, company_
                 counter[k] += 1
 
     # 너무 적은 키워드 거르기
-    filtered_counter = {k: v for k, v in counter.items() if v >= 5}
+    filtered_counter = {k: v for k, v in counter.items() if v >= 2}
     if not filtered_counter:
         raise ValueError("조건에 맞는 키워드가 부족합니다.")
+
+    # 상위 50개 키워드만 선택
+    top_keywords = dict(Counter(filtered_counter).most_common(50))
 
     # 원형 마스크
     size = 800
@@ -44,7 +53,7 @@ def generate_wordcloud_and_upload_from_csv(s3_key: str, sentiment: str, company_
     mask = (x - size // 2) ** 2 + (y - size // 2) ** 2 > (size // 2) ** 2
     mask = 255 * mask.astype(int)
 
-    # 워드클라우드 생성
+    # 6. 워드클라우드 생성
     wordcloud = WordCloud(
         font_path=FONT_PATH,
         background_color="white",
@@ -52,7 +61,7 @@ def generate_wordcloud_and_upload_from_csv(s3_key: str, sentiment: str, company_
         height=size,
         mask=mask,
         colormap="tab10"
-    ).generate_from_frequencies(filtered_counter)
+    ).generate_from_frequencies(top_keywords)
 
     # 이미지 저장 및 S3 업로드
     img_bytes = io.BytesIO()
