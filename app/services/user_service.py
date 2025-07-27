@@ -1,5 +1,5 @@
 from fastapi import HTTPException, status, Depends
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
@@ -14,7 +14,7 @@ from app.db.company_db import get_company_by_id
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/user/login")
+bearer_scheme = HTTPBearer()
 
 # 회원가입
 def signup_user(db: Session, data: UserCreate):
@@ -65,8 +65,12 @@ def login_user(db: Session, data: UserLogin):
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-# 마이페이지
-def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
+# 현재 사용자 가져오기
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db)
+) -> User:
+    token = credentials.credentials
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail=ErrorMessages.INVALID_AUTHENTICATION,
@@ -79,7 +83,7 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    
+
     user = get_user_by_id(db, int(user_id))
     if user is None:
         raise credentials_exception
