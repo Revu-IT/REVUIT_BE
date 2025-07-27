@@ -21,7 +21,7 @@ def get_wordcloud(
     if sentiment not in ["positive", "negative"]:
         raise HTTPException(status_code=400, detail="sentiment는 'positive' 또는 'negative'여야 합니다.")
 
-    s3_key, company_name = get_s3_csv_key(current_user, sentiment)
+    s3_key, company_name = get_s3_csv_key(current_user)
 
     try:
         image_url = generate_wordcloud_and_upload_from_csv(s3_key, sentiment, company_name)
