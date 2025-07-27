@@ -2,10 +2,11 @@ import os
 import numpy as np
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
-from collections import Counter
+from collections import Counter, defaultdict
 import io
 import uuid
 import csv
+from typing import List, Dict
 from app.config.s3 import get_s3_client
 
 # S3 설정
@@ -76,3 +77,67 @@ def generate_wordcloud_and_upload_from_csv(s3_key: str, sentiment: str, company_
     s3.put_object(Bucket=BUCKET_NAME, Key=file_name, Body=img_bytes, ContentType='image/png')
 
     return f"https://{BUCKET_NAME}.s3.ap-northeast-2.amazonaws.com/{file_name}"
+
+
+# 상위 키워드별로 최신 리뷰 1개씩 반환
+def get_top_keyword_reviews(s3_key: str, sentiment: str, top_k: int = 10) -> list:
+    response = s3.get_object(Bucket=BUCKET_NAME, Key=s3_key)
+    content = response["Body"].read().decode("utf-8")
+    reader = list(csv.DictReader(io.StringIO(content)))
+
+    # 키워드별 최신 리뷰 추출
+    keyword_to_reviews = defaultdict(list)
+    for row in reader:
+        label = row.get("positive", "").strip()
+        if sentiment == "positive" and label != "1":
+            continue
+        if sentiment == "negative" and label != "0":
+            continue
+
+        keywords = row.get("keyword", "")
+        for k in keywords.split(","):
+            k = k.strip()
+            if k:
+                keyword_to_reviews[k].append(row)
+
+    # 키워드 등장 수 카운트
+    keyword_counter = {k: len(v) for k, v in keyword_to_reviews.items()}
+    top_keywords = sorted(keyword_counter.items(), key=lambda x: x[1], reverse=True)[:top_k]
+
+    result = []
+    for keyword, _ in top_keywords:
+        # 최신 날짜 기준 정렬
+        keyword_reviews = keyword_to_reviews[keyword]
+        sorted_reviews = sorted(keyword_reviews, key=lambda r: r.get("created_at", ""), reverse=True)
+        latest = sorted_reviews[0] if sorted_reviews else {}
+        result.append({
+            "keyword": keyword,
+            "latest_review": latest.get("content", "")
+        })
+
+    return result
+
+
+# 특정 키워드에 해당하는 모든 리뷰 반환
+def get_reviews_by_keyword(s3_key: str, keyword: str, segment: str = None) -> List[dict]:
+    response = s3.get_object(Bucket=BUCKET_NAME, Key=s3_key)
+    content = response["Body"].read().decode("utf-8")
+    reader = csv.DictReader(io.StringIO(content))
+
+    results = []
+    for row in reader:
+        # sentiment 필터링 (segment == "positive" → positive == "1", segment == "negative" → positive == "0")
+        label = row.get("positive", "").strip()
+        if segment == "positive" and label != "1":
+            continue
+        if segment == "negative" and label != "0":
+            continue
+
+        keywords = [k.strip() for k in row.get("keyword", "").split(",")]
+        if keyword in keywords:
+            results.append({
+                "content": row.get("content", ""),
+                "created_at": row.get("date", "")
+            })
+    return results
+

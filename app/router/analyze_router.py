@@ -1,9 +1,17 @@
-from fastapi import APIRouter, HTTPException, Depends
-from app.services.analyze_service import generate_wordcloud_and_upload_from_csv
+from fastapi import APIRouter, HTTPException, Depends, Query
+from app.services.analyze_service import (
+    get_top_keyword_reviews,
+    get_reviews_by_keyword,
+    generate_wordcloud_and_upload_from_csv
+)
 from app.services.user_service import get_current_user
 from app.models.user_model import User
+from app.config.database import get_db
+from sqlalchemy.orm import Session
+from app.utils.s3_util import get_s3_csv_key  # 새로 만든 유틸
 
 router = APIRouter(prefix="/analyze", tags=["analyze"])
+
 
 @router.get("/wordcloud/{sentiment}")
 def get_wordcloud(
@@ -13,18 +21,36 @@ def get_wordcloud(
     if sentiment not in ["positive", "negative"]:
         raise HTTPException(status_code=400, detail="sentiment는 'positive' 또는 'negative'여야 합니다.")
 
-    # 영어 이름 매핑 
-    company_map = {
-        1: "coupang", 2: "aliexpress", 3: "gmarket", 4: "11st", 5: "temu"
-    }
-    company_name = company_map.get(current_user.company_id)
-    if not company_name:
-        raise HTTPException(status_code=400, detail="유효하지 않은 회사 ID")
+    s3_key, company_name = get_s3_csv_key(current_user, sentiment)
 
-    # csv 저장 경로 지정 
-    s3_key = f"positive/{company_name}.csv"  
     try:
         image_url = generate_wordcloud_and_upload_from_csv(s3_key, sentiment, company_name)
         return {"image_url": image_url}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/keywords/{sentiment}")
+def top_keyword_reviews(
+    sentiment: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    s3_key, _ = get_s3_csv_key(current_user)
+    result = get_top_keyword_reviews(s3_key, sentiment, top_k=10)
+    return {"data": result}
+
+
+@router.get("/reviews-by-keyword")
+def reviews_by_keyword(
+    keyword: str = Query(...),
+    segment: str = Query(None, description="positive 또는 negative 중 하나"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if segment and segment not in ["positive", "negative"]:
+        raise HTTPException(status_code=400, detail="segment는 'positive' 또는 'negative'여야 합니다.")
+
+    s3_key, _ = get_s3_csv_key(current_user)  
+    reviews = get_reviews_by_keyword(s3_key, keyword, segment)
+    return {"keyword": keyword, "segment":segment, "reviews": reviews}
