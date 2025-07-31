@@ -20,6 +20,7 @@ watchfiles==1.1.0
 websockets==15.0.1
 sqlalchemy
 pydantic[email]
+bcrypt<4.0.0
 passlib[bcrypt]
 python-jose[cryptography]
 pydantic-settings
