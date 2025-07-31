@@ -40,3 +40,25 @@ class UserLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    
+
+# 회원 정보 수정
+class UserUpdate(BaseModel):
+    email: EmailStr | None = None
+    password: Annotated[
+        str | None,
+        StringConstraints(min_length=6, max_length=20)
+    ] = None
+    password_confirm: str | None = None
+    company_id: int | None = Field(None, ge=1, le=5)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, v):
+        if v is None:
+            return v
+        has_letter = any(c.isalpha() for c in v)
+        has_number = any(c.isdigit() for c in v)
+        if not (has_letter and has_number):
+            raise ValueError(ErrorMessages.PASSWORD_COMPLEXITY)
+        return v

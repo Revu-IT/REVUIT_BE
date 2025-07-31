@@ -23,3 +23,7 @@ pydantic[email]
 passlib[bcrypt]
 python-jose[cryptography]
 pydantic-settings
+boto3
+python-multipart
+wordcloud
+matplotlib

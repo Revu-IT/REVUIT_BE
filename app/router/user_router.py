@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.config.database import get_db
 from app.models.user_model import User
-from app.schemas.user_schema import UserCreate, UserResponse, UserLogin, Token
-from app.services.user_service import signup_user, login_user, get_current_user, get_my_info
+from app.schemas.user_schema import UserCreate, UserResponse, UserLogin, Token, UserUpdate
+from app.services.user_service import signup_user, login_user, get_current_user, get_my_info, update_user_info
 
 router = APIRouter(prefix="/user", tags=["user"])
 
@@ -21,3 +21,12 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
 @router.get("/mypage", response_model=UserResponse, status_code=status.HTTP_200_OK)
 def mypage(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return get_my_info(current_user)
+
+# 회원 정보 수정
+@router.put("/mypage/update", response_model=UserResponse)
+def update_user(
+    data: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return update_user_info(db, current_user, data)
