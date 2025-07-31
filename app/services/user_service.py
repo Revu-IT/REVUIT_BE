@@ -8,7 +8,7 @@ from app.config.config import settings
 from app.config.errors import ErrorMessages
 from app.config.database import get_db
 from app.models.user_model import User
-from app.schemas.user_schema import UserCreate, UserLogin, UserResponse
+from app.schemas.user_schema import UserCreate, UserLogin, UserResponse, UserUpdate
 from app.db.user_db import get_user_by_email, create_user, get_user_by_id
 from app.db.company_db import get_company_by_id
 
@@ -29,6 +29,7 @@ def signup_user(db: Session, data: UserCreate):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=ErrorMessages.PASSWORD_MISMATCH)
 
     return create_user(db, data)
+
 
 # 로그인
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
@@ -65,6 +66,7 @@ def login_user(db: Session, data: UserLogin):
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+
 # 현재 사용자 가져오기
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
@@ -90,4 +92,30 @@ def get_current_user(
     return user
 
 def get_my_info(current_user: User) -> UserResponse:
+    return UserResponse.model_validate(current_user)
+
+
+# 회원 정보 수정
+def update_user_info(
+    db: Session,
+    current_user: User,
+    data: UserUpdate
+) -> UserResponse:
+    if data.email and data.email != current_user.email:
+        if get_user_by_email(db, data.email):
+            raise HTTPException(status_code=400, detail=ErrorMessages.EMAIL_ALREADY_EXISTS)
+        current_user.email = data.email
+
+    if data.password:
+        if data.password != data.password_confirm:
+            raise HTTPException(status_code=400, detail=ErrorMessages.PASSWORD_MISMATCH)
+        current_user.hashed_password = pwd_context.hash(data.password)
+
+    if data.company_id and data.company_id != current_user.company_id:
+        if not get_company_by_id(db, data.company_id):
+            raise HTTPException(status_code=400, detail=ErrorMessages.INVALID_COMPANY_ID)
+        current_user.company_id = data.company_id
+
+    db.commit()
+    db.refresh(current_user)
     return UserResponse.model_validate(current_user)

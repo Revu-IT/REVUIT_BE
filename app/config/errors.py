@@ -1,5 +1,6 @@
 
 class ErrorMessages:
+    # 유저
     EMAIL_ALREADY_EXISTS = "이미 존재하는 이메일입니다."
     INVALID_COMPANY_ID = "유효하지 않은 회사 ID입니다."
     PASSWORD_MISMATCH = "비밀번호가 일치하지 않습니다."
