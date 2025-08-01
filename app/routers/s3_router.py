@@ -11,7 +11,7 @@ async def upload_file(file: UploadFile = File(...)):
         file_content = await file.read()
         bucket_name = "hanium-reviewit"
         file_name = file.filename
-        folder_name = "coupang" # 임시 ! 
+        folder_name = "11st" # 임시 ! 
         
         # S3에 업로드
         upload_result = upload_to_s3(bucket_name, folder_name, file_name, file_content)

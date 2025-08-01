@@ -12,3 +12,6 @@ class ErrorMessages:
 
     # S3
     INVALID_S3_AUTHENTICATION = "S3 자격 증명이 없습니다."
+
+    # 부서 관련
+    INVALID_DEPARTMENT_ID = "유효하지 않은 부서 ID입니다."

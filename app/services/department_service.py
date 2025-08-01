@@ -1,41 +1,44 @@
 import csv, io
 from app.config.s3 import get_s3_client
+from sqlalchemy.orm import Session
+from app.models.department_model import Department
+from app.config.errors import ErrorMessages
 
 s3 = get_s3_client()
 BUCKET_NAME = "hanium-reviewit"
 
-def get_department_reviews(s3_key: str, department: str) -> dict:
+def get_department_name_by_id(db: Session, department_id: int) -> str:
+    department = db.query(Department).filter(Department.id == department_id).first()
+    if not department:
+        raise ValueError(ErrorMessages.INVALID_DEPARTMENT_ID)
+    return department.name
+
+
+def get_department_reviews(s3_key: str, department_name: str) -> dict:
     response = s3.get_object(Bucket=BUCKET_NAME, Key=s3_key)
     content = response['Body'].read().decode('utf-8-sig')
     reader = csv.DictReader(io.StringIO(content))
 
     results = []
-    pos_count = 0
-    neg_count = 0
+    department_found = False
 
     for row in reader:
-        if row.get("department") != department:
+        if row.get("department", "").strip() != department_name:
             continue
 
-        sentiment_raw = row.get("positive", "").strip()
-        is_positive = sentiment_raw in ("1", "1.0")
-        is_negative = sentiment_raw in ("0", "0.0")
-
-        if is_positive:
-            pos_count += 1
-        elif is_negative:
-            neg_count += 1
+        department_found = True
 
         results.append({
             "content": row.get("content", ""),
             "date": row.get("date", ""),
             "score": row.get("score", ""),
-            "like": row.get("like", ""),
+            "like": row.get("like", "")
         })
 
+    if not department_found:
+        raise ValueError(f"Department '{department_name}' not found in CSV.")
+
     return {
-        "department": department,
-        "positive_count": pos_count,
-        "negative_count": neg_count,
+        "department_name": department_name,
         "reviews": results
     }
