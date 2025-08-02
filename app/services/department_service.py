@@ -15,7 +15,6 @@ def get_department_name_by_id(db: Session, department_id: int) -> str:
         raise ValueError(ErrorMessages.INVALID_DEPARTMENT_ID)
     return department.name
 
-
 def get_department_reviews(s3_key: str, department_name: str) -> DepartmentReviewResponse:
     response = s3.get_object(Bucket=BUCKET_NAME, Key=s3_key)
     content = response['Body'].read().decode('utf-8-sig')

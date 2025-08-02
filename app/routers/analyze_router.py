@@ -8,7 +8,7 @@ from app.services.user_service import get_current_user
 from app.models.user_model import User
 from app.config.database import get_db
 from sqlalchemy.orm import Session
-from app.utils.s3_util import get_s3_csv_key  # 새로 만든 유틸
+from app.utils.s3_util import get_s3_company_review
 
 router = APIRouter(prefix="/analyze", tags=["analyze"])
 
@@ -21,7 +21,7 @@ def get_wordcloud(
     if sentiment not in ["positive", "negative"]:
         raise HTTPException(status_code=400, detail="sentiment는 'positive' 또는 'negative'여야 합니다.")
 
-    s3_key, company_name = get_s3_csv_key(current_user)
+    s3_key, company_name = get_s3_company_review(current_user)
 
     try:
         image_url = generate_wordcloud_and_upload_from_csv(s3_key, sentiment, company_name)
@@ -36,7 +36,7 @@ def top_keyword_reviews(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    s3_key, _ = get_s3_csv_key(current_user)
+    s3_key, _ = get_s3_company_review(current_user)
     result = get_top_keyword_reviews(s3_key, sentiment, top_k=10)
     return {"data": result}
 
@@ -51,6 +51,6 @@ def reviews_by_keyword(
     if segment and segment not in ["positive", "negative"]:
         raise HTTPException(status_code=400, detail="segment는 'positive' 또는 'negative'여야 합니다.")
 
-    s3_key, _ = get_s3_csv_key(current_user)  
+    s3_key, _ = get_s3_company_review(current_user)  
     reviews = get_reviews_by_keyword(s3_key, keyword, segment)
     return {"keyword": keyword, "segment":segment, "reviews": reviews}
