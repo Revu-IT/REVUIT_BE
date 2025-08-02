@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from typing import Union
-from app.router import user_router, s3_router, analyze_router, department_router
+from app.routers import user_router, s3_router, analyze_router, department_router
 from app.config.database import Base, engine
 
 app = FastAPI()
