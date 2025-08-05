@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str
     AWS_BUCKET_NAME: str
     AWS_REGION: str
+
+    # OpenAI API 키
+    OPENAI_API_KEY: str
     
     SECRET_KEY: str = "your-secret-key"
     ALGORITHM: str = "HS256"
