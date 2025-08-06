@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
+    # PostgreSQL 관련 설정
     POSTGRES_HOST: str
     POSTGRES_PORT: str
     POSTGRES_DB: str
@@ -13,9 +14,11 @@ class Settings(BaseSettings):
     AWS_BUCKET_NAME: str
     AWS_REGION: str
     
-    SECRET_KEY: str = "your-secret-key"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    # JWT 관련 설정
+    SECRET_KEY: str
+    ALGORITHM: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
+    
     class Config:
         env_file = ".env"
 
