@@ -19,3 +19,17 @@ def upload_to_s3(bucket_name: str, folder_name: str, file_name: str, file_conten
 
     except NoCredentialsError:
         return ErrorMessages.INVALID_S3_AUTHENTICATION
+
+def list_all_s3_csv_files() -> list:
+    s3 = get_s3_client()
+    result = []
+    paginator = s3.get_paginator("list_objects_v2")
+    pages = paginator.paginate(Bucket=settings.AWS_BUCKET_NAME)
+
+    for page in pages:
+        contents = page.get("Contents", [])
+        for obj in contents:
+            key = obj["Key"]
+            if key.endswith(".csv"):
+                result.append(key)
+    return result
