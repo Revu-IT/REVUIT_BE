@@ -1,6 +1,6 @@
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse
-from app.services.s3_service import upload_to_s3 
+from app.services.s3_service import upload_to_s3, list_all_s3_csv_files
 
 router = APIRouter(prefix="/s3", tags=["s3"])
 
@@ -19,3 +19,7 @@ async def upload_file(file: UploadFile = File(...)):
     
     except Exception as e:
         return JSONResponse(content={"message": str(e)}, status_code=500)
+
+@router.get("/list")
+def list_all_csv_files():
+    return {"files": list_all_s3_csv_files()}
