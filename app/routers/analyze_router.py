@@ -8,10 +8,19 @@ from app.services.user_service import get_current_user
 from app.models.user_model import User
 from app.config.database import get_db
 from sqlalchemy.orm import Session
+# 이 부분은 s3_util.py의 경로에 맞게 수정해야 할 수 있습니다.
 from app.utils.s3_util import get_s3_company_review
 
 router = APIRouter(prefix="/analyze", tags=["analyze"])
 
+# 회사 ID와 이름을 매핑하는 딕셔너리
+COMPANY_MAP = {
+    1: "coupang",
+    2: "aliexpress",
+    3: "gmarket",
+    4: "11st",
+    5: "temu"
+}
 
 @router.get("/wordcloud/{sentiment}")
 def get_wordcloud(
@@ -21,9 +30,20 @@ def get_wordcloud(
     if sentiment not in ["positive", "negative"]:
         raise HTTPException(status_code=400, detail="sentiment는 'positive' 또는 'negative'여야 합니다.")
 
-    s3_key, company_name = get_s3_company_review(current_user)
+    try:
+        # 1. company_name 직접 조회
+        company_name = COMPANY_MAP.get(current_user.company_id)
+        if not company_name:
+            raise HTTPException(status_code=400, detail="유효하지 않은 회사 ID")
+
+        # 2. get_s3_company_review 함수로부터 s3_key만 받기
+        s3_key = get_s3_company_review(current_user)
+        
+    except HTTPException as e:
+        raise e
 
     try:
+        # 3. 서비스 함수에 s3_key와 company_name을 각각 전달
         image_url = generate_wordcloud_and_upload_from_csv(s3_key, sentiment, company_name)
         return {"image_url": image_url}
     except ValueError as e:
@@ -36,7 +56,13 @@ def top_keyword_reviews(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    s3_key, _ = get_s3_company_review(current_user)
+    try:
+        # get_s3_company_review는 문자열(s3_key)을 반환하므로 바로 변수에 할당합니다.
+        s3_key = get_s3_company_review(current_user)
+    except HTTPException as e:
+        raise e
+
+    # 불필요한 튜플 체크 로직을 제거했습니다.
     result = get_top_keyword_reviews(s3_key, sentiment, top_k=10)
     return {"data": result}
 
@@ -51,6 +77,12 @@ def reviews_by_keyword(
     if segment and segment not in ["positive", "negative"]:
         raise HTTPException(status_code=400, detail="segment는 'positive' 또는 'negative'여야 합니다.")
 
-    s3_key, _ = get_s3_company_review(current_user)  
+    try:
+        # get_s3_company_review는 문자열(s3_key)을 반환하므로 바로 변수에 할당합니다.
+        s3_key = get_s3_company_review(current_user)
+    except HTTPException as e:
+        raise e
+        
+    # 불필요한 튜플 체크 로직을 제거했습니다.
     reviews = get_reviews_by_keyword(s3_key, keyword, segment)
-    return {"keyword": keyword, "segment":segment, "reviews": reviews}
+    return {"keyword": keyword, "segment": segment, "reviews": reviews}
