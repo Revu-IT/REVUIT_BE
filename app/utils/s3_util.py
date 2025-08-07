@@ -17,8 +17,6 @@ def get_s3_company_review(user: User) -> str:
     company_name = company_map.get(user.company_id)
     if not company_name:
         raise HTTPException(status_code=400, detail="유효하지 않은 회사 ID")
-    
-    print(company_name)
 
     response = s3.list_objects_v2(
         Bucket=BUCKET_NAME,
