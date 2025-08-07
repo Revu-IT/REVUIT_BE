@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from app.services.analyze_service import (
     get_top_keyword_reviews,
     get_reviews_by_keyword,
-    generate_wordcloud_and_upload_from_csv
+    generate_wordcloud_and_upload_from_csv,
+    generate_wordcloud_for_all_companies
 )
 from app.services.user_service import get_current_user
 from app.models.user_model import User
@@ -81,3 +82,31 @@ def reviews_by_keyword(
         
     reviews = get_reviews_by_keyword(s3_key, keyword, segment)
     return {"keyword": keyword, "segment": segment, "reviews": reviews}
+
+
+@router.get("/wordcloud/all/{sentiment}", summary="전체 회사 대상 3개월 워드클라우드 생성")
+def get_all_companies_wordcloud(
+    sentiment: str,
+):
+    """
+    S3 'airflow/' 경로의 모든 CSV 파일을 종합하여, 
+    최근 3개월 데이터에 대한 워드클라우드를 생성합니다.
+    """
+    # 'sentiment' 파라미터가 'positive' 또는 'negative'가 맞는지 확인
+    if sentiment not in ["positive", "negative"]:
+        raise HTTPException(status_code=400, detail="sentiment는 'positive' 또는 'negative'여야 합니다.")
+
+    try:
+        # 실제 로직을 담고 있는 서비스 함수를 호출.
+        image_url = generate_wordcloud_for_all_companies(sentiment)
+        
+        # 성공 시, 이미지 URL을 JSON 형태로 반환
+        return {"image_url": image_url}
+    
+    except ValueError as e:
+        # 서비스에서 'ValueError'가 발생하면 (데이터가 없는 경우), 404 에러를 반환
+        raise HTTPException(status_code=404, detail=str(e))
+    
+    except Exception as e:
+        # 그 외 예측하지 못한 에러가 발생하면, 500 에러를 반환
+        raise HTTPException(status_code=500, detail=f"전체 워드클라우드 생성 중 오류 발생: {e}")
