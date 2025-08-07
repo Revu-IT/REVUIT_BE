@@ -3,13 +3,15 @@ from app.services.analyze_service import (
     get_top_keyword_reviews,
     get_reviews_by_keyword,
     generate_wordcloud_and_upload_from_csv,
-    generate_wordcloud_for_all_companies
+    generate_wordcloud_for_all_companies,
+    get_company_score_ranking
 )
 from app.services.user_service import get_current_user
 from app.models.user_model import User
 from app.config.database import get_db
 from sqlalchemy.orm import Session
 from app.utils.s3_util import get_s3_company_review
+import re 
 
 router = APIRouter(prefix="/analyze", tags=["analyze"])
 
@@ -110,3 +112,21 @@ def get_all_companies_wordcloud(
     except Exception as e:
         # 그 외 예측하지 못한 에러가 발생하면, 500 에러를 반환
         raise HTTPException(status_code=500, detail=f"전체 워드클라우드 생성 중 오류 발생: {e}")
+    
+
+@router.get("/scores/ranking", summary="전체 회사별 평균 점수 및 순위")
+def get_score_ranking():
+    """
+    S3 'airflow/' 경로의 모든 CSV 파일을 읽어, 
+    각 회사별 리뷰의 평균 점수를 계산하고 순위를 반환합니다.
+    """
+    try:
+        # 점수 순위 계산 서비스 호출
+        ranking_data = get_company_score_ranking()
+        return {"data": ranking_data}
+    except ValueError as e:
+        # 서비스에서 파일이나 데이터가 없다고 보낸 오류 처리
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        # 기타 예상치 못한 서버 오류 처리
+        raise HTTPException(status_code=500, detail=f"점수 순위 계산 중 오류 발생: {e}")
