@@ -6,7 +6,18 @@ class ReviewItem(BaseModel):
     date: str
     score: str
     like: str
+    positive: bool
 
 class DepartmentReviewResponse(BaseModel):
     department_name: str
     reviews: List[ReviewItem]
+
+class Summary(BaseModel):
+    content: str
+    count: int
+
+class DepartmentSummaryResponse(BaseModel):
+    department_name: str
+    positive_opinions: List[Summary]
+    negative_opinions: List[Summary]
+    reports: str

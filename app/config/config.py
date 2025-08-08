@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str
     AWS_BUCKET_NAME: str
     AWS_REGION: str
+
+    # OpenAI API 키
+    OPENAI_API_KEY: str
     
     # JWT 관련 설정
     SECRET_KEY: str
