@@ -36,7 +36,7 @@ def department_reviews(
     "/summary",
     response_model=DepartmentSummaryResponse,
     summary="부서 리뷰 요약 & 리포트 API",
-    description="30일 이내 부서 리뷰 데이터를 바탕으로 긍/부정 의견을 2개씩 조회하고, 리포트를 제공합니다.",
+    description="90일 이내 부서 리뷰 데이터를 바탕으로 긍/부정 의견을 2개씩 조회하고, 리포트를 제공합니다.",
 )
 def department_review_summary(
     department_id: int = Query(..., alias="departmentId", description="부서 ID 예: 1"),

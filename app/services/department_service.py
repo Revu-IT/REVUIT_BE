@@ -58,13 +58,13 @@ def analyze_department_review(s3_key: str, department_name: str) -> DepartmentSu
     department_review_response = get_department_reviews(s3_key, department_name)
     reviews = department_review_response.reviews
 
-    thirty_days_ago = datetime.now() - timedelta(days=30)
+    three_months_days_ago = datetime.now() - timedelta(days=90)
 
     filtered_reviews = []
     for review in reviews:
         try:
             review_date = datetime.strptime(review.date, "%Y-%m-%d %H:%M:%S")
-            if review_date >= thirty_days_ago:
+            if review_date >= three_months_days_ago:
                 filtered_reviews.append(review)
         except Exception:
             continue
