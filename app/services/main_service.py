@@ -67,7 +67,7 @@ def get_company_statistics(user) -> Dict:
     def compute_monthly_avg(score_dict):
         return {
             month: round(sum(scores) / len(scores), 2)
-            for month, scores in score_dict.items()
+            for month, scores in sorted(score_dict.items())
             if scores
         }
 
