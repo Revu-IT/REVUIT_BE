@@ -272,49 +272,77 @@ def generate_wordcloud_for_all_companies(sentiment: str) -> str:
 
 def get_company_score_ranking() -> List[Dict]:
     """
-    S3 'airflow/' 폴더의 모든 CSV를 읽어, 회사별 평균 점수를 계산하고 순위를 매깁니다.
+    S3 'airflow/' 폴더의 모든 CSV를 읽어, 회사별 'positive' 필드 평균 점수를 계산하고 순위를 매깁니다.
     """
+    import re
+    import csv
+    import io
+    from typing import List, Dict
+
+    # S3에서 'airflow/' 디렉토리의 모든 CSV 파일 가져오기
     all_csv_keys = list_s3_csv_files_in_prefix("airflow/")
     if not all_csv_keys:
         raise ValueError("S3 'airflow/' 경로에 분석할 CSV 파일이 없습니다.")
 
-    company_scores = {}
+    company_positive_averages = {}
 
     for s3_key in all_csv_keys:
+        # 파일 이름에서 회사 이름 추출
         match = re.search(r'airflow/(.+)\.csv', s3_key)
         if not match:
+            print(f"파일 이름에서 회사 이름을 추출할 수 없습니다: {s3_key}")
             continue
         company_name = match.group(1)
 
-        response = s3.get_object(Bucket=BUCKET_NAME, Key=s3_key)
-        
-        content = response['Body'].read().decode('utf-8-sig')
-        
-        reader = csv.DictReader(io.StringIO(content))
+        # S3에서 파일 내용 읽기
+        try:
+            response = s3.get_object(Bucket=BUCKET_NAME, Key=s3_key)
+            content = response['Body'].read().decode('utf-8-sig')
+            reader = csv.DictReader(io.StringIO(content))
+        except Exception as e:
+            print(f"S3 파일 읽기 실패: {s3_key}, 에러: {e}")
+            continue
 
-        scores = []
+        positive_sum = 0.0
+        total_reviews = 0
+
+        # CSV 데이터 처리
         for row in reader:
             try:
-                score = float(row.get("score"))
-                scores.append(score)
-            except (ValueError, TypeError, AttributeError):
+                # 'positive' 필드가 존재하지 않으면 경고 출력
+                if "positive" not in row:
+                    print(f"누락된 'positive' 필드: {row}")
+                    continue
+                
+                # 'positive' 필드 값을 가져옴 
+                positive_value = float(row.get("positive", 0))
+                positive_sum += positive_value
+                total_reviews += 1
+            except (ValueError, TypeError, AttributeError) as e:
+                print(f"데이터 처리 중 에러 발생: {row}, 에러: {e}")
                 continue
         
-        if scores:
-            average_score = sum(scores) / len(scores)
-            company_scores[company_name] = average_score
+        # 회사별 'positive' 평균 계산
+        if total_reviews > 0:
+            positive_average = positive_sum / total_reviews
+            company_positive_averages[company_name] = positive_average
+            print(f"회사: {company_name}, 총 'positive' 점수: {positive_sum:.2f}, 리뷰 수: {total_reviews}, 평균 'positive': {positive_average:.2f}")
+        else:
+            print(f"회사: {company_name}에 리뷰 데이터가 없습니다.")
 
-    if not company_scores:
-        raise ValueError("점수를 계산할 수 있는 데이터가 없습니다.")
+    if not company_positive_averages:
+        raise ValueError("'positive' 점수를 계산할 수 있는 데이터가 없습니다.")
 
-    sorted_companies = sorted(company_scores.items(), key=lambda item: item[1], reverse=True)
+    # 'positive' 평균 점수가 높은 순으로 정렬
+    sorted_companies = sorted(company_positive_averages.items(), key=lambda item: item[1], reverse=True)
 
     ranked_results = []
-    for i, (company, avg_score) in enumerate(sorted_companies):
+    for i, (company, avg_positive) in enumerate(sorted_companies):
         ranked_results.append({
             "rank": i + 1,
             "company_name": company,
-            "average_score": round(avg_score, 2)
+            "positive_average": round(avg_positive, 2)  # 평균 점수를 소수점 둘째 자리까지 반올림
         })
 
     return ranked_results
+
