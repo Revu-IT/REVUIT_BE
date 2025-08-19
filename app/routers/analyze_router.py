@@ -12,7 +12,7 @@ from app.models.user_model import User
 from app.config.database import get_db
 from sqlalchemy.orm import Session
 from app.utils.s3_util import get_s3_company_review
-import re 
+import re
 
 router = APIRouter(prefix="/analyze", tags=["analyze"])
 
@@ -25,7 +25,14 @@ COMPANY_MAP = {
     5: "temu"
 }
 
-@router.get("/wordcloud/{sentiment}")
+@router.get(
+    "/wordcloud/{sentiment}",
+    summary="소속 회사의 감성별 워드클라우드 생성 API",
+    description="""
+    현재 로그인된 사용자의 소속 회사 리뷰 데이터를 기반으로, 
+    지정된 감성(긍정/부정)에 대한 워드클라우드를 생성하고 이미지 URL을 반환합니다.
+    """
+)
 def get_wordcloud(
     sentiment: str,
     current_user: User = Depends(get_current_user)
@@ -53,14 +60,17 @@ def get_wordcloud(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/keywords/quarterly", summary="로그인된 사용자의 회사 분기별 상위 4개 키워드 조회하기")
+@router.get(
+    "/keywords/quarterly",
+    summary="소속 회사 분기별 상위 키워드 조회 API",
+    description="""
+    현재 로그인된 사용자가 속한 회사의 리뷰 데이터를 기반으로, 
+    현재 분기에 가장 많이 언급된 상위 4개의 키워드를 조회합니다.
+    """
+)
 def get_top_keywords_by_quarter(
     current_user: User = Depends(get_current_user)
 ):
-    """
-    현재 로그인된 사용자가 속한 회사의 리뷰 데이터를 기반으로,
-    분기별 가장 많이 언급된 상위 4개의 키워드를 조회합니다.
-    """
     try:
         # 현재 유저 정보로 S3 리뷰 파일 경로 가져오기
         s3_key = get_s3_company_review(current_user)
@@ -79,7 +89,14 @@ def get_top_keywords_by_quarter(
         raise HTTPException(status_code=500, detail=f"분기별 키워드 분석 중 오류 발생: {e}")
     
 
-@router.get("/keywords/{sentiment}")
+@router.get(
+    "/keywords/{sentiment}",
+    summary="소속 회사의 감성별 상위 키워드 조회 API",
+    description="""
+    현재 로그인된 사용자의 소속 회사 리뷰 데이터를 기반으로, 
+    지정된 감성(긍정/부정)에 따라 가장 빈번하게 나타나는 상위 10개 키워드와 그 빈도를 반환합니다.
+    """
+)
 def top_keyword_reviews(
     sentiment: str,
     db: Session = Depends(get_db),
@@ -94,7 +111,14 @@ def top_keyword_reviews(
     return {"data": result}
 
 
-@router.get("/reviews-by-keyword")
+@router.get(
+    "/reviews-by-keyword",
+    summary="특정 키워드가 포함된 리뷰 조회 API",
+    description="""
+    현재 로그인된 사용자의 소속 회사 리뷰 데이터에서 특정 키워드를 포함하는 리뷰 목록을 조회합니다. 
+    추가적으로 감성(긍정/부정)에 따라 필터링할 수 있습니다.
+    """
+)
 def reviews_by_keyword(
     keyword: str = Query(...),
     segment: str = Query(None, description="positive 또는 negative 중 하나"),
@@ -113,14 +137,18 @@ def reviews_by_keyword(
     return {"keyword": keyword, "segment": segment, "reviews": reviews}
 
 
-@router.get("/wordcloud/all/{sentiment}", summary="전체 회사 대상 3개월 워드클라우드 생성")
+@router.get(
+    "/wordcloud/all/{sentiment}",
+    summary="전체 회사 대상 3개월 워드클라우드 생성 API",
+    description="""
+    S3 'airflow/' 경로의 모든 CSV 파일을 종합하여, 
+    최근 3개월 데이터에 대한 전체 회사 대상 워드클라우드를 생성하고 이미지 URL을 반환합니다. 
+    감성(긍정/부정)을 지정할 수 있습니다.
+    """
+)
 def get_all_companies_wordcloud(
     sentiment: str,
 ):
-    """
-    S3 'airflow/' 경로의 모든 CSV 파일을 종합하여, 
-    최근 3개월 데이터에 대한 워드클라우드를 생성합니다.
-    """
     # 'sentiment' 파라미터가 'positive' 또는 'negative'가 맞는지 확인
     if sentiment not in ["positive", "negative"]:
         raise HTTPException(status_code=400, detail="sentiment는 'positive' 또는 'negative'여야 합니다.")
@@ -141,12 +169,15 @@ def get_all_companies_wordcloud(
         raise HTTPException(status_code=500, detail=f"전체 워드클라우드 생성 중 오류 발생: {e}")
     
 
-@router.get("/scores/ranking", summary="전체 회사별 평균 점수 및 순위")
-def get_score_ranking():
-    """
+@router.get(
+    "/scores/ranking",
+    summary="전체 회사별 평균 점수 및 순위 조회 API",
+    description="""
     S3 'airflow/' 경로의 모든 CSV 파일을 읽어, 
-    각 회사별 리뷰의 평균 점수를 계산하고 순위를 반환합니다.
+    각 회사별 리뷰의 평균 점수를 계산하고 순위를 매겨 반환합니다.
     """
+)
+def get_score_ranking():
     try:
         # 점수 순위 계산 서비스 호출
         ranking_data = get_company_score_ranking()
@@ -157,4 +188,3 @@ def get_score_ranking():
     except Exception as e:
         # 기타 예상치 못한 서버 오류 처리
         raise HTTPException(status_code=500, detail=f"점수 순위 계산 중 오류 발생: {e}")
-    
