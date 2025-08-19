@@ -346,3 +346,52 @@ def get_company_score_ranking() -> List[Dict]:
 
     return ranked_results
 
+
+def get_current_quarter_top_keywords(s3_key: str, top_k: int = 4) -> List[str]:
+    """
+    S3 리뷰 데이터에서 '현재 분기'에 해당하는 데이터만 필터링하여
+    상위 키워드 리스트를 반환합니다.
+    """
+    # 현재 분기
+    now = datetime.now()
+    current_year = now.year
+    current_quarter = (now.month - 1) // 3 + 1 
+
+    # S3에서 CSV 파일 읽기
+    response = s3.get_object(Bucket=BUCKET_NAME, Key=s3_key)
+    content = response["Body"].read().decode("utf-8")
+    reader = csv.DictReader(io.StringIO(content))
+
+    # 현재 분기의 키워드 빈도를 저장할 Counter
+    keyword_counter = Counter()
+
+    for row in reader:
+        try:
+            # 날짜 파싱
+            review_date_str = row.get("date", "").split(" ")[0]
+            review_date = datetime.strptime(review_date_str, '%Y-%m-%d')
+
+            # 2. 리뷰 날짜가 현재 분기에 속하는지 확인
+            review_year = review_date.year
+            review_quarter = (review_date.month - 1) // 3 + 1
+
+            # 올해, 현재 분기 데이터가 아니면 건너뛰기
+            if not (review_year == current_year and review_quarter == current_quarter):
+                continue
+
+            # 정제된 텍스트에서 키워드 추출 및 카운트
+            text_content = row.get("cleaned_text")
+            if text_content:
+                keywords = [k.strip() for k in text_content.split() if k.strip()]
+                keyword_counter.update(keywords)
+
+        except (ValueError, IndexError):
+            # 날짜 형식이 잘못된 경우 건너뛰기
+            continue
+
+    if not keyword_counter:
+        raise ValueError("현재 분기에 해당하는 리뷰 데이터가 없습니다.")
+
+    # 3. 가장 많이 나온 키워드 K개를 리스트로 반환
+    top_items = keyword_counter.most_common(top_k)
+    return [keyword for keyword, freq in top_items]
