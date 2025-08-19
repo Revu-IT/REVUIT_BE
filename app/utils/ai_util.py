@@ -1,5 +1,6 @@
 import os
 import re
+import json
 from typing import List, Tuple
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -22,8 +23,9 @@ def call_gpt_with_prompt(prompt: str, max_tokens: int = 700) -> str:
         temperature=0.6,
         max_tokens=max_tokens,
     )
-    return response.choices[0].message.content.strip()
-
+    content = response.choices[0].message.content.strip()
+    print("🔹 GPT 응답:", content)
+    return content
 def extract_summary_topics(response_text: str) -> List[Tuple[str, int]]:
     topics = []
     for line in response_text.splitlines():
@@ -41,6 +43,15 @@ def extract_summary_topics(response_text: str) -> List[Tuple[str, int]]:
 def build_summary(topics_with_counts: List[Tuple[str, int]]) -> List[Summary]:
     return [Summary(content=topic, count=count) for topic, count in topics_with_counts]
 
+def parse_summary_json(response_text: str) -> List[Summary]:
+    try:
+        data = json.loads(response_text)
+        return [Summary(content=item["content"], count=item["count"]) for item in data]
+    except json.JSONDecodeError:
+        print("❌ JSON 파싱 실패, fallback 실행")
+        topics = extract_summary_topics(response_text)
+        return build_summary(topics)
+
 def analyze_reviews_with_ai(
     reviews: List[ReviewItem],
     department_name: str,
@@ -53,6 +64,13 @@ def analyze_reviews_with_ai(
     print(f"총 리뷰 개수: {len(reviews)}")
     print(f"긍정 리뷰 개수: {len(positive_texts)}")
     print(f"부정 리뷰 개수: {len(negative_texts)}")
+    print("📌 긍정 리뷰 목록:")
+    for i, text in enumerate(positive_texts, 1):
+        print(f"{i}. {text}")
+    print("\n📌 부정 리뷰 목록:")
+    for i, text in enumerate(negative_texts, 1):
+        print(f"{i}. {text}")
+    print("\n----------------------------\n")
 
     # 요약 생성
     summary_prompt_template = load_prompt(summary_prompt_path)
@@ -67,8 +85,7 @@ def analyze_reviews_with_ai(
             review_list=review_list
         )
         response_text = call_gpt_with_prompt(prompt)
-        topics = extract_summary_topics(response_text)
-        return build_summary(topics)
+        return parse_summary_json(response_text)
 
     pos_summary = generate_summary(positive_texts, "긍정")
     neg_summary = generate_summary(negative_texts, "부정")
