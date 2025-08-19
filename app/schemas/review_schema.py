@@ -21,3 +21,8 @@ class DepartmentSummaryResponse(BaseModel):
     positive_opinions: List[Summary]
     negative_opinions: List[Summary]
     reports: str
+
+class CompanyQuarterSummaryResponse(BaseModel):
+    company: str
+    positive: bool
+    summary: str
