@@ -61,8 +61,6 @@ def get_top_keywords_by_quarter(
     현재 로그인된 사용자가 속한 회사의 리뷰 데이터를 기반으로,
     분기별 가장 많이 언급된 상위 4개의 키워드를 조회합니다.
     """
-
-    print("in")
     try:
         # 현재 유저 정보로 S3 리뷰 파일 경로 가져오기
         s3_key = get_s3_company_review(current_user)
