@@ -4,7 +4,8 @@ from app.services.analyze_service import (
     get_reviews_by_keyword,
     generate_wordcloud_and_upload_from_csv,
     generate_wordcloud_for_all_companies,
-    get_company_score_ranking
+    get_company_score_ranking,
+    get_current_quarter_top_keywords
 )
 from app.services.user_service import get_current_user
 from app.models.user_model import User
@@ -51,6 +52,34 @@ def get_wordcloud(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
+@router.get("/keywords/quarterly", summary="로그인된 사용자의 회사 분기별 상위 4개 키워드 조회하기")
+def get_top_keywords_by_quarter(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    현재 로그인된 사용자가 속한 회사의 리뷰 데이터를 기반으로,
+    분기별 가장 많이 언급된 상위 4개의 키워드를 조회합니다.
+    """
+
+    print("in")
+    try:
+        # 현재 유저 정보로 S3 리뷰 파일 경로 가져오기
+        s3_key = get_s3_company_review(current_user)
+    except HTTPException as e:
+        # 유저 정보가 유효하지 않거나 파일이 없을 경우
+        raise e
+
+    try:
+        quarterly_keywords = get_current_quarter_top_keywords(s3_key, top_k=4)
+        return {"data": quarterly_keywords}
+    
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"분기별 키워드 분석 중 오류 발생: {e}")
+    
 
 @router.get("/keywords/{sentiment}")
 def top_keyword_reviews(
@@ -130,3 +159,4 @@ def get_score_ranking():
     except Exception as e:
         # 기타 예상치 못한 서버 오류 처리
         raise HTTPException(status_code=500, detail=f"점수 순위 계산 중 오류 발생: {e}")
+    
