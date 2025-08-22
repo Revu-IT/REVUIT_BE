@@ -121,7 +121,7 @@ def generate_wordcloud_and_upload_from_csv(s3_key: str, sentiment: str, company_
 def get_top_keyword_reviews(s3_key: str, sentiment: str, top_k: int = 10) -> list:
     """개별 회사의 상위 키워드와 최신 리뷰를 반환합니다."""
     response = s3.get_object(Bucket=BUCKET_NAME, Key=s3_key)
-    content = response["Body"].read().decode("utf-8")
+    content = response['Body'].read().decode('utf-8-sig')
     reader = list(csv.DictReader(io.StringIO(content)))
 
     keyword_to_reviews = defaultdict(list)
@@ -171,7 +171,7 @@ def get_top_keyword_reviews(s3_key: str, sentiment: str, top_k: int = 10) -> lis
 def get_reviews_by_keyword(s3_key: str, keyword: str, segment: str = None) -> List[dict]:
     """개별 회사에서 특정 키워드가 포함된 리뷰 목록을 반환합니다."""
     response = s3.get_object(Bucket=BUCKET_NAME, Key=s3_key)
-    content = response["Body"].read().decode("utf-8")
+    content = response['Body'].read().decode('utf-8-sig')
     reader = csv.DictReader(io.StringIO(content))
 
     results = []
@@ -367,7 +367,7 @@ def get_current_quarter_top_keywords(s3_key: str, top_k: int = 4) -> List[str]:
 
     # S3에서 CSV 파일 읽기
     response = s3.get_object(Bucket=BUCKET_NAME, Key=s3_key)
-    content = response["Body"].read().decode("utf-8")
+    content = response['Body'].read().decode('utf-8-sig')
     reader = csv.DictReader(io.StringIO(content))
 
     # 현재 분기의 키워드 빈도를 저장할 Counter
