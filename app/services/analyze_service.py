@@ -44,7 +44,7 @@ def list_s3_csv_files_in_prefix(prefix: str) -> List[str]:
 def generate_wordcloud_and_upload_from_csv(s3_key: str, sentiment: str, company_name: str) -> str:
     """개별 회사의 CSV를 읽어 워드클라우드를 생성하고 S3에 업로드합니다."""
     response = s3.get_object(Bucket=BUCKET_NAME, Key=s3_key)
-    content = response['Body'].read().decode('utf-8')
+    content = response['Body'].read().decode('utf-8-sig')  # BOM 제거
     reader = csv.DictReader(io.StringIO(content))
     
     counter = Counter()
@@ -53,30 +53,37 @@ def generate_wordcloud_and_upload_from_csv(s3_key: str, sentiment: str, company_
     for row in reader:
         # 날짜 필터링 (최근 3개월)
         try:
-            review_date_str = row.get("date", "").split(" ")[0]
-            review_date = datetime.strptime(review_date_str, '%Y-%m-%d')
+            review_date_str = row.get("date", "").strip()  # BOM 제거 후 정상 접근
+            if not review_date_str:
+                continue
+            
+            # 시간 정보 포함된 날짜 형식 처리
+            review_date = datetime.strptime(review_date_str, '%Y-%m-%d %H:%M:%S')
             if review_date < three_months_ago:
                 continue
-        except (ValueError, IndexError):
+        except ValueError:
             continue
 
         # 감성 필터링
         try:
-            label = int(float(row.get("positive", "")))
+            label = float(row.get("positive", ""))
         except (ValueError, TypeError):
             continue
-        if (sentiment == "positive" and label != 1) or (sentiment == "negative" and label != 0):
+        if (sentiment == "positive" and label not in [1, 1.0]) or (sentiment == "negative" and label not in [0, 0.0]):
             continue
 
+        # 텍스트 필터링
         text_content = row.get("cleaned_text")
-        if not text_content:
+        if not text_content or not text_content.strip():
             continue
         
+        # 키워드 수집
         for k in text_content.split():
             k = k.strip()
             if k:
                 counter[k] += 1
     
+    # 키워드가 없을 경우 에러 발생
     if not counter:
         raise ValueError("최근 3개월간 조건에 맞는 키워드가 없습니다.")
 
@@ -109,6 +116,7 @@ def generate_wordcloud_and_upload_from_csv(s3_key: str, sentiment: str, company_
     s3.put_object(Bucket=BUCKET_NAME, Key=file_name, Body=img_bytes, ContentType='image/png')
     
     return f"https://{BUCKET_NAME}.s3.ap-northeast-2.amazonaws.com/{file_name}"
+
 
 def get_top_keyword_reviews(s3_key: str, sentiment: str, top_k: int = 10) -> list:
     """개별 회사의 상위 키워드와 최신 리뷰를 반환합니다."""
