@@ -18,7 +18,7 @@ def load_prompt(path: str) -> str:
 
 def call_gpt_with_prompt(prompt: str, max_tokens: int = 700) -> str:
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.6,
         max_tokens=max_tokens,
