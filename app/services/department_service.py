@@ -1,15 +1,12 @@
-import csv, io
 from typing import List
-from app.config.s3 import get_s3_client
+from datetime import datetime, timedelta
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from app.models.department_model import Department
-from app.config.errors import ErrorMessages
+from app.models.review_model import Review, ReviewDepartment
 from app.schemas.review_schema import DepartmentReviewResponse, ReviewItem, DepartmentSummaryResponse
-from datetime import datetime, timedelta
+from app.config.errors import ErrorMessages
 from app.utils.ai_util import analyze_reviews_with_ai
-
-s3 = get_s3_client()
-BUCKET_NAME = "hanium-reviewit"
 
 def get_department_name_by_id(db: Session, department_id: int) -> str:
     department = db.query(Department).filter(Department.id == department_id).first()
@@ -17,62 +14,59 @@ def get_department_name_by_id(db: Session, department_id: int) -> str:
         raise ValueError(ErrorMessages.INVALID_DEPARTMENT_ID)
     return department.name
 
-def get_department_reviews(s3_key: str, department_name: str) -> DepartmentReviewResponse:
-    response = s3.get_object(Bucket=BUCKET_NAME, Key=s3_key)
-    content = response['Body'].read().decode('utf-8-sig')
-    reader = csv.DictReader(io.StringIO(content))
+def get_department_reviews(db: Session, department_id: int, company_id: int) -> DepartmentReviewResponse:
+    department_name = get_department_name_by_id(db, department_id)
+
+    reviews_query = (
+        db.query(Review)
+        .join(ReviewDepartment)
+        .filter(
+            ReviewDepartment.department_id == department_id,
+            Review.company_id == company_id
+        )
+        .all()
+    )
+
+    if not reviews_query:
+        raise ValueError(f"'{department_name}' 부서에 리뷰가 없습니다.")
 
     results: List[ReviewItem] = []
-    department_found = False
 
-    for row in reader:
-        if row.get("department", "").strip() != department_name:
-            continue
-
-        department_found = True
-        positive_value = row.get("positive", "0").strip()
-        positive = False
+    for r in reviews_query:
         try:
-            positive = float(positive_value) == 1.0
+            results.append(
+                ReviewItem(
+                    content=r.content or "",
+                    date=r.date.strftime("%Y-%m-%d %H:%M:%S"),
+                    score=float(r.score) if r.score is not None else None,
+                    like=int(r.likes or 0),
+                    positive=r.positive,
+                )
+            )
         except Exception:
-            positive = False
-
-        review = ReviewItem(
-            content=row.get("content", ""),
-            date=row.get("date", ""),
-            score=row.get("score", ""),
-            like=row.get("like", ""),
-            positive = positive
-        )
-        results.append(review)
-
-    if not department_found:
-        raise ValueError(f"Department '{department_name}' not found in CSV.")
+            continue
 
     return DepartmentReviewResponse(
         department_name=department_name,
         reviews=results
     )
 
-def analyze_department_review(s3_key: str, department_name: str) -> DepartmentSummaryResponse:
-    department_review_response = get_department_reviews(s3_key, department_name)
+def analyze_department_review(db: Session, department_id: int, company_id: int) -> DepartmentSummaryResponse:
+    department_review_response = get_department_reviews(db, department_id, company_id)
     reviews = department_review_response.reviews
 
-    three_months_days_ago = datetime.now() - timedelta(days=90)
+    three_months_ago = datetime.now() - timedelta(days=90)
+    filtered_reviews = [
+        r for r in reviews
+        if datetime.strptime(r.date, "%Y-%m-%d %H:%M:%S") >= three_months_ago
+    ]
 
-    filtered_reviews = []
-    for review in reviews:
-        try:
-            review_date = datetime.strptime(review.date, "%Y-%m-%d %H:%M:%S")
-            if review_date >= three_months_days_ago:
-                filtered_reviews.append(review)
-        except Exception:
-            continue
-
-    positive_opinions, negative_opinions, reports = analyze_reviews_with_ai(filtered_reviews, department_name)
+    positive_opinions, negative_opinions, reports = analyze_reviews_with_ai(
+        filtered_reviews, department_review_response.department_name
+    )
 
     return DepartmentSummaryResponse(
-        department_name=department_name,
+        department_name=department_review_response.department_name,
         positive_opinions=positive_opinions,
         negative_opinions=negative_opinions,
         reports=reports

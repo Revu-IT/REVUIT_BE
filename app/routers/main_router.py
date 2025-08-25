@@ -8,12 +8,17 @@ from app.schemas.review_schema import CompanyQuarterSummaryResponse
 
 router = APIRouter(prefix="/main", tags=["main"])
 
-@router.get("/statistics")
+@router.get(
+    "/statistics",
+    summary="리뷰 별점 추이 데이터 API",
+    description="""
+    메인 페이지의 평점 추이 그래프를 위한 정보를 제공합니다.""",
+)
 def company_statistics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return get_company_statistics(current_user)
+    return get_company_statistics(current_user, db)
 
 @router.get(
     "/summary",
@@ -26,4 +31,4 @@ def quarterly_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return get_quarterly_summary(current_user)
+    return get_quarterly_summary(current_user, db)

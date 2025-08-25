@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 
@@ -9,3 +9,4 @@ class Company(Base):
     name = Column(String, unique=True, index=True)
 
     users = relationship("User", back_populates="company")
+    reviews = relationship("Review", back_populates="company")
