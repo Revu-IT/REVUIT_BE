@@ -1,29 +1,19 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from app.services.analyze_service import (
+    generate_wordcloud,
     get_top_keyword_reviews,
     get_reviews_by_keyword,
-    generate_wordcloud_and_upload_from_csv,
     generate_wordcloud_for_all_companies,
     get_company_score_ranking,
-    get_current_quarter_top_keywords
+    get_current_quarter_top_keywords,
 )
 from app.services.user_service import get_current_user
 from app.models.user_model import User
+from app.models.company_model import Company
 from app.config.database import get_db
 from sqlalchemy.orm import Session
-from app.utils.s3_util import get_s3_company_review
-import re
 
 router = APIRouter(prefix="/analyze", tags=["analyze"])
-
-# 회사 ID와 이름을 매핑하는 딕셔너리
-COMPANY_MAP = {
-    1: "coupang",
-    2: "aliexpress",
-    3: "gmarket",
-    4: "11st",
-    5: "temu"
-}
 
 @router.get(
     "/wordcloud/{sentiment}",
@@ -33,32 +23,25 @@ COMPANY_MAP = {
     지정된 감성(긍정/부정)에 대한 워드클라우드를 생성하고 이미지 URL을 반환합니다.
     """
 )
-def get_wordcloud(
+def get_wordcloud_for_company(
     sentiment: str,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     if sentiment not in ["positive", "negative"]:
         raise HTTPException(status_code=400, detail="sentiment는 'positive' 또는 'negative'여야 합니다.")
 
-    try:
-        # company_name 직접 조회
-        company_name = COMPANY_MAP.get(current_user.company_id)
-        if not company_name:
-            raise HTTPException(status_code=400, detail="유효하지 않은 회사 ID")
-
-        # get_s3_company_review 함수로부터 s3_key만 받기
-        s3_key = get_s3_company_review(current_user)
-        
-    except HTTPException as e:
-        raise e
+    company = db.query(Company).filter(Company.id == current_user.company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="소속 회사를 찾을 수 없습니다.")
 
     try:
-        # 서비스 함수에 s3_key와 company_name을 각각 전달
-        image_url = generate_wordcloud_and_upload_from_csv(s3_key, sentiment, company_name)
+        image_url = generate_wordcloud(db, current_user.company_id, sentiment, company.name)
         return {"image_url": image_url}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"워드클라우드 생성 중 서버 오류 발생: {e}")
 
 @router.get(
     "/keywords/quarterly",
@@ -69,25 +52,16 @@ def get_wordcloud(
     """
 )
 def get_top_keywords_by_quarter(
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
-        # 현재 유저 정보로 S3 리뷰 파일 경로 가져오기
-        s3_key = get_s3_company_review(current_user)
-    except HTTPException as e:
-        # 유저 정보가 유효하지 않거나 파일이 없을 경우
-        raise e
-
-    try:
-        quarterly_keywords = get_current_quarter_top_keywords(s3_key, top_k=4)
+        quarterly_keywords = get_current_quarter_top_keywords(db, current_user.company_id, top_k=4)
         return {"data": quarterly_keywords}
-    
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"분기별 키워드 분석 중 오류 발생: {e}")
-    
 
 @router.get(
     "/keywords/{sentiment}",
@@ -97,18 +71,19 @@ def get_top_keywords_by_quarter(
     지정된 감성(긍정/부정)에 따라 가장 빈번하게 나타나는 상위 10개 키워드와 그 빈도를 반환합니다.
     """
 )
-def top_keyword_reviews(
+def get_top_keywords_by_sentiment(
     sentiment: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if sentiment not in ["positive", "negative"]:
+        raise HTTPException(status_code=400, detail="sentiment는 'positive' 또는 'negative'여야 합니다.")
+    
     try:
-        s3_key = get_s3_company_review(current_user)
-    except HTTPException as e:
-        raise e
-
-    result = get_top_keyword_reviews(s3_key, sentiment, top_k=10)
-    return {"data": result}
+        result = get_top_keyword_reviews(db, current_user.company_id, sentiment, top_k=10)
+        return {"data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"키워드 조회 중 오류 발생: {e}")
 
 
 @router.get(
@@ -119,72 +94,57 @@ def top_keyword_reviews(
     추가적으로 감성(긍정/부정)에 따라 필터링할 수 있습니다.
     """
 )
-def reviews_by_keyword(
-    keyword: str = Query(...),
-    segment: str = Query(None, description="positive 또는 negative 중 하나"),
+def get_reviews_list_by_keyword(
+    keyword: str = Query(..., min_length=1, description="검색할 키워드"),
+    sentiment: str = Query(None, description="positive 또는 negative 중 하나"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if segment and segment not in ["positive", "negative"]:
-        raise HTTPException(status_code=400, detail="segment는 'positive' 또는 'negative'여야 합니다.")
-
-    try:
-        s3_key = get_s3_company_review(current_user)
-    except HTTPException as e:
-        raise e
-        
-    reviews = get_reviews_by_keyword(s3_key, keyword, segment)
-    return {"keyword": keyword, "segment": segment, "reviews": reviews}
+    if sentiment and sentiment not in ["positive", "negative"]:
+        raise HTTPException(status_code=400, detail="sentiment는 'positive' 또는 'negative'여야 합니다.")
+    
+    try:    
+        reviews = get_reviews_by_keyword(db, current_user.company_id, keyword, sentiment)
+        return {"keyword": keyword, "sentiment": sentiment, "reviews": reviews}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"리뷰 조회 중 오류 발생: {e}")
 
 
 @router.get(
     "/wordcloud/all/{sentiment}",
     summary="전체 회사 대상 3개월 워드클라우드 생성 API",
     description="""
-    S3 'airflow/' 경로의 모든 CSV 파일을 종합하여, 
-    최근 3개월 데이터에 대한 전체 회사 대상 워드클라우드를 생성하고 이미지 URL을 반환합니다. 
+    전체 회사의 최근 3개월 리뷰 데이터에 대한 워드클라우드를 생성하고 이미지 URL을 반환합니다. 
     감성(긍정/부정)을 지정할 수 있습니다.
     """
 )
 def get_all_companies_wordcloud(
     sentiment: str,
+    db: Session = Depends(get_db)
 ):
-    # 'sentiment' 파라미터가 'positive' 또는 'negative'가 맞는지 확인
     if sentiment not in ["positive", "negative"]:
         raise HTTPException(status_code=400, detail="sentiment는 'positive' 또는 'negative'여야 합니다.")
 
     try:
-        # 실제 로직을 담고 있는 서비스 함수를 호출.
-        image_url = generate_wordcloud_for_all_companies(sentiment)
-        
-        # 성공 시, 이미지 URL을 JSON 형태로 반환
+        image_url = generate_wordcloud_for_all_companies(db, sentiment)
         return {"image_url": image_url}
-    
     except ValueError as e:
-        # 서비스에서 'ValueError'가 발생하면 (데이터가 없는 경우), 404 에러를 반환
         raise HTTPException(status_code=404, detail=str(e))
-    
     except Exception as e:
-        # 그 외 예측하지 못한 에러가 발생하면, 500 에러를 반환
         raise HTTPException(status_code=500, detail=f"전체 워드클라우드 생성 중 오류 발생: {e}")
-    
 
 @router.get(
     "/scores/ranking",
     summary="전체 회사별 평균 점수 및 순위 조회 API",
     description="""
-    S3 'airflow/' 경로의 모든 CSV 파일을 읽어, 
-    각 회사별 리뷰의 평균 점수를 계산하고 순위를 매겨 반환합니다.
+    전체 회사의 리뷰 평균 점수를 계산하고 순위를 매겨 반환합니다.
     """
 )
-def get_score_ranking():
+def get_score_ranking(db: Session = Depends(get_db)):
     try:
-        # 점수 순위 계산 서비스 호출
-        ranking_data = get_company_score_ranking()
+        ranking_data = get_company_score_ranking(db)
         return {"data": ranking_data}
     except ValueError as e:
-        # 서비스에서 파일이나 데이터가 없다고 보낸 오류 처리
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        # 기타 예상치 못한 서버 오류 처리
         raise HTTPException(status_code=500, detail=f"점수 순위 계산 중 오류 발생: {e}")
