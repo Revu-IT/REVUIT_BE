@@ -4,8 +4,8 @@ from pydantic import BaseModel
 class ReviewItem(BaseModel):
     content: str
     date: str
-    score: str
-    like: str
+    score: float | None
+    like: int
     positive: bool
 
 class DepartmentReviewResponse(BaseModel):

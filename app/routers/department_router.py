@@ -23,11 +23,8 @@ def department_reviews(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    s3_key = get_s3_company_review(current_user)
-
     try:
-        department_name = get_department_name_by_id(db, department_id)
-        return get_department_reviews(s3_key, department_name)
+        return get_department_reviews(db, department_id, current_user.company_id)
     except ValueError:
         raise HTTPException(status_code=400, detail=ErrorMessages.INVALID_DEPARTMENT_ID)
     
@@ -43,10 +40,7 @@ def department_review_summary(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    s3_key = get_s3_company_review(current_user)
-
     try:
-        department_name = get_department_name_by_id(db, department_id)
-        return analyze_department_review(s3_key, department_name)
+        return analyze_department_review(db, department_id, current_user.company_id)
     except ValueError:
         raise HTTPException(status_code=400, detail=ErrorMessages.INVALID_DEPARTMENT_ID)

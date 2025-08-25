@@ -1,71 +1,39 @@
-import csv, io
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Dict, List
+
 from fastapi import HTTPException
-from app.config.s3 import get_s3_client
+from sqlalchemy.orm import Session
+
+from app.models.review_model import Review
 from app.schemas.review_schema import ReviewItem, CompanyQuarterSummaryResponse
-from app.utils.ai_util import call_gpt_with_prompt, parse_summary_json, load_prompt
-
-s3 = get_s3_client()
-BUCKET_NAME = "hanium-reviewit"
-
-COMPANY_MAP = {
-    1: "coupang",
-    2: "aliexpress",
-    3: "gmarket",
-    4: "11st",
-    5: "temu"
-}
+from app.utils.ai_util import call_gpt_with_prompt, load_prompt
 
 summary_prompt_path = "app/prompts/main_summary_prompt.txt"
 
-def get_company_statistics(user) -> Dict:
+def get_company_statistics(user, db: Session) -> Dict:
     target_company_id = user.company_id
-    target_company = COMPANY_MAP[target_company_id]
+
+    target_reviews = db.query(Review).filter(Review.company_id == target_company_id).all()
+    other_reviews = db.query(Review).filter(Review.company_id != target_company_id).all()
 
     monthly_scores_target = defaultdict(list)
     monthly_scores_others = defaultdict(list)
-    total_review_count = 0
+    total_review_count = len(target_reviews)
 
-    for cid, company in COMPANY_MAP.items():
-        key = f"airflow/{company}.csv"
+    current_year = datetime.now().year
 
-        try:
-            response = s3.get_object(Bucket=BUCKET_NAME, Key=key)
-        except Exception:
-            continue  # S3에 파일이 없으면 해당 회사는 스킵
-
-        content = response['Body'].read().decode('utf-8-sig')
-        reader = csv.DictReader(io.StringIO(content))
-
-        for row in reader:
-            try:
-                date_str = row.get("date", "").strip()
-                score_str = row.get("score", "").strip()
-                if not date_str or not score_str:
-                    continue
-
-                # 전체 리뷰 수 count
-                if cid == target_company_id:
-                    total_review_count += 1
-
-                # 2025년 리뷰만 월별 평균 계산
-                date_obj = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-
-                if date_obj.year != 2025:
-                    continue
-
-                month = date_obj.month
-                score = float(score_str)
-
-                if cid == target_company_id:
-                    monthly_scores_target[month].append(score)
-                else:
-                    monthly_scores_others[month].append(score)
-
-            except Exception:
+    def process_reviews(reviews, bucket):
+        for r in reviews:
+            if not r.date or not r.score:
                 continue
+            if r.date.year != current_year:
+                continue
+            month = r.date.month
+            bucket[month].append(float(r.score))
+
+    process_reviews(target_reviews, monthly_scores_target)
+    process_reviews(other_reviews, monthly_scores_others)
 
     def compute_monthly_avg(score_dict):
         return {
@@ -81,38 +49,35 @@ def get_company_statistics(user) -> Dict:
         "industry_avg": compute_monthly_avg(monthly_scores_others),
     }
 
-def get_company_reviews(user) -> List[ReviewItem]:
-    company_name = COMPANY_MAP[user.company_id]
-    key = f"airflow/{company_name}.csv"
+def get_company_reviews(user, db: Session) -> List[ReviewItem]:
+    reviews = db.query(Review).filter(Review.company_id == user.company_id).all()
+    review_items = []
 
-    try:
-        response = s3.get_object(Bucket=BUCKET_NAME, Key=key)
-    except Exception:
-        return []
-
-    content = response['Body'].read().decode('utf-8-sig')
-    reader = csv.DictReader(io.StringIO(content))
-
-    reviews = []
-    for row in reader:
+    for r in reviews:
         try:
-            review_date = datetime.strptime(row.get("date", ""), "%Y-%m-%d %H:%M:%S")
-            positive = float(row.get("positive", 0)) == 1.0
-            reviews.append(ReviewItem(
-                content=row.get("content", ""),
-                date=row.get("date", ""),
-                score=row.get("score", ""),
-                like=row.get("like", ""),
-                positive=positive
-            ))
+            review_items.append(
+                ReviewItem(
+                    content=r.content or "",
+                    date=r.date.strftime("%Y-%m-%d %H:%M:%S"),
+                    score=float(r.score) if r.score is not None else None,
+                    like=int(r.likes or 0),
+                    positive=r.positive,
+                )
+            )
         except Exception:
             continue
-    return reviews
 
-def get_quarterly_summary(user) -> CompanyQuarterSummaryResponse:
-    reviews = get_company_reviews(user)
+    return review_items
+
+
+def get_quarterly_summary(user, db: Session) -> CompanyQuarterSummaryResponse:
+    reviews = get_company_reviews(user, db)
     if not reviews:
-        return CompanyQuarterSummaryResponse(company=COMPANY_MAP[user.company_id], positive=True, summary="리뷰 데이터 없음")
+        return CompanyQuarterSummaryResponse(
+            company=user.company.name,
+            positive=True,
+            summary="리뷰 데이터 없음",
+        )
 
     three_months_ago = datetime.now() - timedelta(days=90)
     recent_reviews = [r for r in reviews if datetime.strptime(r.date, "%Y-%m-%d %H:%M:%S") >= three_months_ago]
@@ -154,7 +119,7 @@ def get_quarterly_summary(user) -> CompanyQuarterSummaryResponse:
         summary_text = ai_response
 
     return CompanyQuarterSummaryResponse(
-        company=COMPANY_MAP[user.company_id],
+        company=user.company.name,
         positive=majority_positive,
         summary=summary_text
     )
