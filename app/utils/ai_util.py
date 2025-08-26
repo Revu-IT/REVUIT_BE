@@ -3,11 +3,13 @@ import re
 import json
 from typing import List, Tuple
 from dotenv import load_dotenv
-from openai import OpenAI
+# from openai import OpenAI
+import anthropic
 from app.schemas.review_schema import Summary, ReviewItem
 
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 summary_prompt_path = os.path.join(os.path.dirname(__file__), '..', 'prompts', 'summary_prompt.txt')
 report_prompt_path = os.path.join(os.path.dirname(__file__), '..', 'prompts', 'report_prompt.txt')
@@ -16,16 +18,28 @@ def load_prompt(path: str) -> str:
     with open(path, encoding='utf-8') as f:
         return f.read()
 
-def call_gpt_with_prompt(prompt: str, max_tokens: int = 700) -> str:
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
+# def call_gpt_with_prompt(prompt: str, max_tokens: int = 700) -> str:
+#     response = client.chat.completions.create(
+#         model="gpt-4o-mini",
+#         messages=[{"role": "user", "content": prompt}],
+#         temperature=0.6,
+#         max_tokens=max_tokens,
+#     )
+#     content = response.choices[0].message.content.strip()
+#     print("🔹 GPT 응답:", content)
+#     return content
+
+def call_ai_with_prompt(prompt: str, max_tokens: int = 700) -> str:
+    response = client.messages.create(
+        model="claude-3-haiku-20240307",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.6,
         max_tokens=max_tokens,
     )
-    content = response.choices[0].message.content.strip()
-    print("🔹 GPT 응답:", content)
+    content = response.content[0].text.strip()
+    print("🔹 Claude 응답:", content)
     return content
+
 def extract_summary_topics(response_text: str) -> List[Tuple[str, int]]:
     topics = []
     for line in response_text.splitlines():
@@ -84,7 +98,7 @@ def analyze_reviews_with_ai(
             top_k=top_k,
             review_list=review_list
         )
-        response_text = call_gpt_with_prompt(prompt)
+        response_text = call_ai_with_prompt(prompt)
         return parse_summary_json(response_text)
 
     pos_summary = generate_summary(positive_texts, "긍정")
@@ -101,6 +115,6 @@ def analyze_reviews_with_ai(
         department_name=department_name
     )
 
-    report_text = call_gpt_with_prompt(report_prompt, max_tokens=500)
+    report_text = call_ai_with_prompt(report_prompt, max_tokens=500)
 
     return pos_summary, neg_summary, report_text

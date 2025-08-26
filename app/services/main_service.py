@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.review_model import Review
 from app.schemas.review_schema import ReviewItem, CompanyQuarterSummaryResponse
-from app.utils.ai_util import call_gpt_with_prompt, load_prompt
+from app.utils.ai_util import call_ai_with_prompt, load_prompt
 
 summary_prompt_path = "app/prompts/main_summary_prompt.txt"
 
@@ -104,7 +104,7 @@ def get_quarterly_summary(user, db: Session) -> CompanyQuarterSummaryResponse:
             sentiment="긍정" if majority_positive else "부정",
             review_list=review_list
         )
-        ai_response = call_gpt_with_prompt(prompt, max_tokens=200).strip()
+        ai_response = call_ai_with_prompt(prompt, max_tokens=200).strip()
 
         if ai_response.endswith("."):
             ai_response = ai_response[:-1].strip()

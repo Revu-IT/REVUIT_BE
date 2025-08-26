@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     # OpenAI API 키
     OPENAI_API_KEY: str
+    ANTHROPIC_API_KEY: str
     
     # JWT 관련 설정
     SECRET_KEY: str
