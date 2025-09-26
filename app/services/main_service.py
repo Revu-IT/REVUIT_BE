@@ -1,10 +1,10 @@
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Dict, List
-
+import time
+import anthropic
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-
 from app.models.review_model import Review
 from app.schemas.review_schema import ReviewItem, CompanyQuarterSummaryResponse
 from app.utils.ai_util import call_ai_with_prompt, load_prompt
@@ -100,23 +100,41 @@ def get_quarterly_summary(user, db: Session) -> CompanyQuarterSummaryResponse:
 
     summary_text = ""
     for attempt in range(1, 6):
-        prompt = prompt_template.format(
-            sentiment="긍정" if majority_positive else "부정",
-            review_list=review_list
-        )
-        ai_response = call_ai_with_prompt(prompt, max_tokens=200).strip()
+        try:
+            prompt = prompt_template.format(
+                sentiment="긍정" if majority_positive else "부정",
+                review_list=review_list
+            )
+            ai_response = call_ai_with_prompt(prompt, max_tokens=200).strip()
 
-        if ai_response.endswith("."):
-            ai_response = ai_response[:-1].strip()
+            if ai_response.endswith("."):
+                ai_response = ai_response[:-1].strip()
 
-        if ai_response.endswith("다"):
-            summary_text = ai_response
+            words = ai_response.split()
+            if ai_response.endswith("다") and len(words) <= 5:
+                summary_text = ai_response
+                print(f"✅ 요약 성공 (시도 {attempt}): {summary_text}")
+                break
+            else:
+                print(f"⚠️ 요약 문장이 조건에 맞지 않아 재생성 시도 {attempt}: '{ai_response}'")
+
+        except anthropic.RateLimitError:
+            print(f"🔴 API Rate Limit 초과. 재시도 {attempt} 중단 후 Fallback 로직으로 전환합니다.")
             break
-        else:
-            print(f"⚠️ 요약 문장이 조건에 맞지 않아 재생성 시도 {attempt}")
+        
+        except Exception as e:
+            print(f"🔴 API 호출 중 알 수 없는 에러 발생: {e}")
+            break
+
+        if attempt < 5:
+            time.sleep(1)
 
     if not summary_text:
-        summary_text = ai_response
+        print("🔴 5번 시도 모두 실패. Fallback 로직을 실행합니다.")
+        if majority_positive:
+            summary_text = "편리하다"
+        else:
+            summary_text = "불편하다"
 
     return CompanyQuarterSummaryResponse(
         company=user.company.name,
